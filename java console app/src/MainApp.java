@@ -40,9 +40,9 @@ public class MainApp {
     // ==========================================
     private static void loadDummyData() {
         System.out.println("[System] Loading Dummy Data...");
-        
-        customers[0] = new Customer("C101", "Amit Sharma", "amit@test.com", "9876543210", "pass123", "Delhi North", "RESIDENTIAL", 2.0, 1500);
-        customers[1] = new Customer("C102", "Priya Singh", "priya@test.com", "8765432109", "pass123", "Delhi South", "COMMERCIAL", 5.0, 5000);
+
+        customers[0] = new Customer("1234567890123", "Amit Sharma", "amit@test.com", "9876543210", "pass123", "Mr", "amit123", "Active", "Delhi North", "RESIDENTIAL", 2.0, 1500);
+        customers[1] = new Customer("1234567890124", "Priya Singh", "priya@test.com", "8765432109", "pass123", "Mrs", "priya123", "Active", "Delhi South", "COMMERCIAL", 5.0, 5000);
         customerCount = 2;
 
         staffList[0] = new Staff("S101", "Ramesh Kumar", "staff123", "Delhi North");
@@ -68,7 +68,7 @@ public class MainApp {
         System.out.println("[System] Dummy Data Loaded.");
         System.out.println("Admin Credentials -> Username: admin | Password: admin123");
         System.out.println("Staff Credentials -> ID: S101 | Password: staff123");
-        System.out.println("Customer Credentials -> ID: C101 | Password: pass123");
+        System.out.println("Customer Credentials -> Consumer ID: 1234567890123 | Password: pass123");
     }
 
     // ==========================================
@@ -167,21 +167,32 @@ public class MainApp {
             System.out.println("Error: System capacity reached!");
             return;
         }
-        String id = readString("Enter a new Consumer ID (Alphanumeric): ");
+        String id = readConsumerId("Enter a new Consumer ID (13 digits): ");
         if (findCustomerIndex(id) != -1) {
             System.out.println("Error: Consumer ID already exists!");
             return;
         }
-        
+
+        String title = readTitle("Select Title (Mr/Mrs/Ms/Dr): ");
         String name = readName("Enter your Name: ");
         String email = readEmail("Enter your Email: ");
-        String mobile = readMobile("Enter your Mobile Number: ");
-        String pass = readPassword("Create a Password (min 6 chars, at least 1 digit): ");
+        if (isEmailDuplicate(email)) {
+            System.out.println("Error: Email already registered!");
+            return;
+        }
+        String mobile = readMobile("Enter your Mobile Number (10 digits): ");
+        String userId = readUserId("Create User ID (5-20 alphanumeric): ");
+        String pass = readPassword("Create a Password (6-30 chars, at least 1 digit): ");
+        String confirmPass = readString("Confirm Password: ");
+        if (!pass.equals(confirmPass)) {
+            System.out.println("Error: Passwords do not match!");
+            return;
+        }
         String address = readString("Enter your Area/City: ");
         String connType = readConnType("Enter Connection Type (RESIDENTIAL/COMMERCIAL): ");
         double load = readDouble("Enter Sanctioned Load in kW (e.g., 2.0): ");
 
-        customers[customerCount] = new Customer(id, name, email, mobile, pass, address, connType, load, 0);
+        customers[customerCount] = new Customer(id, name, email, mobile, pass, title, userId, "Active", address, connType, load, 0);
         customers[customerCount].addNotification("Registration successful. Connection is active.");
         customerCount++;
         System.out.println("Registration successful! You can now login.");
@@ -248,15 +259,16 @@ public class MainApp {
         System.out.println("2. UPI");
         System.out.println("3. Net Banking");
         int choice = readInt("Select Payment Method: ");
-        
+
         String method = "N/A";
         boolean success = false;
-        
+
         if (choice == 1) {
-            String card = readString("Enter 16-digit Card Number: ");
-            if (card.matches("\\d{16}")) {
-                method = "CARD"; success = true;
-            } else System.out.println("Invalid Card Number.");
+            String card = readCardNumber("Enter Card Number (minimum 16 digits): ");
+            String holderName = readCardHolderName("Enter Card Holder Name (minimum 10 characters): ");
+            String expiry = readExpiryDate("Enter Expiry Date (MM/YY): ");
+            String cvv = readCVV("Enter CVV (3-4 digits): ");
+            method = "CARD"; success = true;
         } else if (choice == 2) {
             String upi = readString("Enter UPI ID (e.g. user@bank): ");
             if (upi.contains("@")) {
@@ -317,11 +329,18 @@ public class MainApp {
             System.out.println("Error: Complaint capacity reached!");
             return;
         }
-        String type = readString("Enter Problem Description: ");
+        String consumerNo = readConsumerId("Enter Consumer No (13 digits): ");
+        String complaintType = readComplaintType("Enter Complaint Type (Billing related/Voltage related/Frequent disruption/Street light related/Pole related): ");
+        String category = readString("Enter Category: ");
+        String contactPerson = readString("Enter Contact Person: ");
+        String landmark = readString("Enter Landmark: ");
+        String problemDesc = readString("Enter Problem Description: ");
+        String mobile = readMobile("Enter Mobile Number (10 digits): ");
+        String address = readString("Enter Address: ");
         String priority = readPriority("Enter Priority (LOW/MEDIUM/HIGH): ");
         String complaintId = "COMP" + (1000 + complaintCount + 1);
 
-        complaints[complaintCount] = new Complaint(complaintId, loggedInCustomer.getConsumerId(), type, priority, "OPEN");
+        complaints[complaintCount] = new Complaint(complaintId, loggedInCustomer.getConsumerId(), problemDesc, priority, "OPEN");
         complaintCount++;
         loggedInCustomer.addNotification("Complaint raised successfully: " + complaintId);
         System.out.println("Successfully registered your complaint. ID: " + complaintId);
@@ -872,8 +891,8 @@ public class MainApp {
     private static String readPassword(String prompt) {
         while (true) {
             String pass = readString(prompt);
-            if (pass.length() >= 6 && pass.matches(".*\\d.*")) return pass;
-            System.out.println("Error: Password too weak! Min 6 chars, at least 1 digit.");
+            if (pass.length() >= 6 && pass.length() <= 30 && pass.matches(".*\\d.*")) return pass;
+            System.out.println("Error: Password too weak! Min 6 chars, max 30 chars, at least 1 digit.");
         }
     }
     
@@ -890,6 +909,78 @@ public class MainApp {
             String type = readString(prompt).toUpperCase();
             if (type.equals("RESIDENTIAL") || type.equals("COMMERCIAL")) return type;
             System.out.println("Error: Must be RESIDENTIAL or COMMERCIAL.");
+        }
+    }
+
+    private static String readConsumerId(String prompt) {
+        while (true) {
+            String id = readString(prompt);
+            if (id.matches("^\\d{13}$")) return id;
+            System.out.println("Error: Consumer ID must be exactly 13 digits.");
+        }
+    }
+
+    private static String readUserId(String prompt) {
+        while (true) {
+            String userId = readString(prompt);
+            if (userId.matches("^[A-Za-z0-9]{5,20}$")) return userId;
+            System.out.println("Error: User ID must be 5-20 alphanumeric characters.");
+        }
+    }
+
+    private static String readTitle(String prompt) {
+        while (true) {
+            String title = readString(prompt).trim();
+            if (title.equals("Mr") || title.equals("Mrs") || title.equals("Ms") || title.equals("Dr")) return title;
+            System.out.println("Error: Title must be Mr, Mrs, Ms, or Dr.");
+        }
+    }
+
+    private static boolean isEmailDuplicate(String email) {
+        for (int i = 0; i < customerCount; i++) {
+            if (customers[i].getEmail().equalsIgnoreCase(email)) return true;
+        }
+        return false;
+    }
+
+    private static String readCardNumber(String prompt) {
+        while (true) {
+            String card = readString(prompt).replace("\\s", "");
+            if (card.matches("^\\d{16,}$")) return card;
+            System.out.println("Error: Card number must be minimum 16 digits.");
+        }
+    }
+
+    private static String readCardHolderName(String prompt) {
+        while (true) {
+            String name = readString(prompt);
+            if (name.trim().length() >= 10) return name;
+            System.out.println("Error: Card holder name must be minimum 10 characters.");
+        }
+    }
+
+    private static String readExpiryDate(String prompt) {
+        while (true) {
+            String expiry = readString(prompt);
+            if (expiry.matches("^(0[1-9]|1[0-2])/\\d{2}$")) return expiry;
+            System.out.println("Error: Expiry date must be in MM/YY format.");
+        }
+    }
+
+    private static String readCVV(String prompt) {
+        while (true) {
+            String cvv = readString(prompt);
+            if (cvv.matches("^\\d{3,4}$")) return cvv;
+            System.out.println("Error: CVV must be 3-4 digits.");
+        }
+    }
+
+    private static String readComplaintType(String prompt) {
+        while (true) {
+            String type = readString(prompt).trim();
+            if (type.equals("Billing related") || type.equals("Voltage related") || type.equals("Frequent disruption") ||
+                type.equals("Street light related") || type.equals("Pole related")) return type;
+            System.out.println("Error: Invalid complaint type. Choose from: Billing related, Voltage related, Frequent disruption, Street light related, Pole related");
         }
     }
 }

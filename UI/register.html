@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Register | VidyutSeva</title>
+  <meta name="description" content="New customer self-registration for the electricity billing portal." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="login-page">
+  <div class="bg-orbs">
+    <div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div>
+  </div>
+  <div class="login-container" style="max-width:520px">
+    <div class="brand">
+      <span class="brand-icon">⚡</span>
+      <h1 class="brand-name">VidyutSeva</h1>
+      <p class="brand-tagline">New Customer Registration</p>
+    </div>
+    <div class="card login-card">
+      <form id="regForm" novalidate>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="regId">Consumer ID (13 digits) *</label>
+            <input type="text" id="regId" placeholder="1234567890123" maxlength="13" required />
+            <span class="field-error" id="errRegId"></span>
+          </div>
+          <div class="form-group">
+            <label for="regTitle">Title *</label>
+            <select id="regTitle" required>
+              <option value="Mr">Mr</option>
+              <option value="Mrs">Mrs</option>
+              <option value="Ms">Ms</option>
+              <option value="Dr">Dr</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="regName">Full Name *</label>
+          <input type="text" id="regName" placeholder="e.g. Rahul Gupta" required />
+          <span class="field-error" id="errRegName"></span>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="regEmail">Email *</label>
+            <input type="email" id="regEmail" placeholder="you@example.com" required />
+            <span class="field-error" id="errRegEmail"></span>
+          </div>
+          <div class="form-group">
+            <label for="regMobile">Mobile (10 digits) *</label>
+            <input type="tel" id="regMobile" placeholder="9876543210" maxlength="10" required />
+            <span class="field-error" id="errRegMobile"></span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="regUserId">User ID (5-20 alphanumeric) *</label>
+          <input type="text" id="regUserId" placeholder="e.g. rahul123" required />
+          <span class="field-error" id="errRegUserId"></span>
+        </div>
+        <div class="form-group">
+          <label for="regArea">Address / Area *</label>
+          <input type="text" id="regArea" placeholder="e.g. Delhi North" required />
+          <span class="field-error" id="errRegArea"></span>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="regType">Connection Type *</label>
+            <select id="regType">
+              <option value="RESIDENTIAL">Residential</option>
+              <option value="COMMERCIAL">Commercial</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="regLoad">Sanctioned Load (kW) *</label>
+            <input type="number" id="regLoad" placeholder="e.g. 2.0" min="0.1" step="0.1" required />
+            <span class="field-error" id="errRegLoad"></span>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="regPass">Password (6-30 chars, 1 digit) *</label>
+            <div class="password-wrap">
+              <input type="password" id="regPass" placeholder="Min 6 chars, 1 digit" required />
+              <button type="button" class="toggle-pass" onclick="togglePw('regPass',this)">👁</button>
+            </div>
+            <span class="field-error" id="errRegPass"></span>
+          </div>
+          <div class="form-group">
+            <label for="regPassC">Confirm Password *</label>
+            <div class="password-wrap">
+              <input type="password" id="regPassC" placeholder="Re-enter password" required />
+              <button type="button" class="toggle-pass" onclick="togglePw('regPassC',this)">👁</button>
+            </div>
+            <span class="field-error" id="errRegPassC"></span>
+          </div>
+        </div>
+        <div id="regAlert" class="alert hidden" style="margin-bottom:12px"></div>
+        <button type="submit" class="btn btn-primary btn-full" id="regBtn">Create Account</button>
+      </form>
+      <div class="divider"><span>or</span></div>
+      <p class="register-link">Already registered? <a href="index.html">Login here</a></p>
+    </div>
+  </div>
+  <script src="data.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    function togglePw(id, btn) {
+      const el = document.getElementById(id);
+      const is = el.type === 'password';
+      el.type = is ? 'text' : 'password';
+      btn.textContent = is ? '🙈' : '👁';
+    }
+    function se(id, msg) { const e = document.getElementById(id); if(e) e.textContent = msg; }
+    function clearErrs() { document.querySelectorAll('.field-error').forEach(e => e.textContent = ''); }
+
+    document.getElementById('regForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      clearErrs();
+      const id    = document.getElementById('regId').value.trim();
+      const title = document.getElementById('regTitle').value;
+      const name  = document.getElementById('regName').value.trim();
+      const email = document.getElementById('regEmail').value.trim();
+      const mob   = document.getElementById('regMobile').value.trim();
+      const userId = document.getElementById('regUserId').value.trim();
+      const area  = document.getElementById('regArea').value.trim();
+      const type  = document.getElementById('regType').value;
+      const load  = parseFloat(document.getElementById('regLoad').value);
+      const pass  = document.getElementById('regPass').value;
+      const passC = document.getElementById('regPassC').value;
+      let ok = true;
+
+      const errId = Validate.consumerId(id); if (errId) { se('errRegId', errId); ok = false; }
+      else if (findCustomer(id)) { se('errRegId', 'Consumer ID already exists.'); ok = false; }
+
+      const errName = Validate.name(name); if (errName) { se('errRegName', errName); ok = false; }
+      const errEmail = Validate.email(email); if (errEmail) { se('errRegEmail', errEmail); ok = false; }
+      else if (DB.customers.find(c => c.email === email)) { se('errRegEmail', 'Email already registered.'); ok = false; }
+
+      const errMob = Validate.mobile(mob); if (errMob) { se('errRegMobile', errMob); ok = false; }
+      const errUserId = Validate.userId(userId); if (errUserId) { se('errRegUserId', errUserId); ok = false; }
+      else if (DB.customers.find(c => c.userId === userId)) { se('errRegUserId', 'User ID already exists.'); ok = false; }
+
+      if (!area) { se('errRegArea', 'Area is required.'); ok = false; }
+      const errLoad = Validate.load(load); if (errLoad) { se('errRegLoad', errLoad); ok = false; }
+      const errPass = Validate.password(pass); if (errPass) { se('errRegPass', errPass); ok = false; }
+      if (pass !== passC) { se('errRegPassC', 'Passwords do not match.'); ok = false; }
+      if (!ok) return;
+
+      DB.customers.push({
+        consumerId: id, name, email, mobile: mob, password: pass,
+        title, userId, status: 'Active',
+        addressArea: area, connectionType: type, sanctionedLoadKw: load,
+        previousMeterReading: 0,
+        notifications: ['Registration successful. Your connection is now active.'],
+      });
+
+      const alertEl = document.getElementById('regAlert');
+      alertEl.className = 'alert alert-success';
+      alertEl.textContent = '✅ Registration successful! Redirecting to login…';
+      alertEl.classList.remove('hidden');
+      document.getElementById('regBtn').disabled = true;
+      setTimeout(() => window.location.href = 'index.html', 1800);
+    });
+  </script>
+</body>
+</html>

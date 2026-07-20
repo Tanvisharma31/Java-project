@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Admin Portal | VidyutSeva</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+<div id="toastContainer"></div>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="document.getElementById('sidebar').classList.remove('open');document.getElementById('sidebarOverlay').classList.remove('active')"></div>
+<button class="hamburger" id="hamburger" onclick="document.getElementById('sidebar').classList.toggle('open');document.getElementById('sidebarOverlay').classList.toggle('active')">☰</button>
+
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main-content" id="mainContent"></main>
+</div>
+
+<script src="data.js"></script>
+<script src="auth.js"></script>
+<script>
+const session = Auth.require('admin');
+
+document.getElementById('sidebar').innerHTML = buildSidebar('admin','dashboard');
+
+function navigate(section) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelector(`[data-section="${section}"]`)?.classList.add('active');
+  const renders = {
+    dashboard: renderDashboard,
+    customers: renderCustomers,
+    staff: renderStaff,
+    tariff: renderTariff,
+    requests: renderRequests,
+    analytics: renderAnalytics
+  };
+  (renders[section] || renderDashboard)();
+}
+
+/* ── DASHBOARD ── */
+function renderDashboard() {
+  const a = getAnalytics();
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-header animate-in">
+      <h1 class="page-title">Admin Dashboard</h1>
+      <p class="page-subtitle">System overview and quick stats</p>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-label">Customers</div><div class="stat-value">${a.totalCustomers}</div></div>
+      <div class="stat-card"><div class="stat-icon">👷</div><div class="stat-label">Staff</div><div class="stat-value">${a.totalStaff}</div></div>
+      <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-label">Revenue</div><div class="stat-value" style="font-size:1.3rem">₹${a.revenue.toFixed(0)}</div></div>
+      <div class="stat-card"><div class="stat-icon">⏳</div><div class="stat-label">Pending Dues</div><div class="stat-value" style="font-size:1.3rem;color:var(--warning)">₹${a.pendingDues.toFixed(0)}</div></div>
+      <div class="stat-card"><div class="stat-icon">📋</div><div class="stat-label">Open Complaints</div><div class="stat-value" style="color:var(--danger)">${a.openComplaints}</div></div>
+      <div class="stat-card"><div class="stat-icon">🔧</div><div class="stat-label">Pending Requests</div><div class="stat-value" style="color:var(--warning)">${a.pendingRequests}</div></div>
+    </div>
+    <div class="section-card animate-in">
+      <div class="section-head"><span class="section-title">⚠️ Defaulters (Overdue Bills)</span></div>
+      ${a.defaulters.length === 0 ? '<div class="empty-state"><span class="empty-state-icon">✅</span><div class="empty-state-text">No defaulters!</div></div>' :
+        `<div class="table-wrap"><table><thead><tr><th>Bill ID</th><th>Consumer ID</th><th>Amount</th><th>Due Date</th><th>Late Fee</th></tr></thead><tbody>
+        ${a.defaulters.map(b=>`<tr><td>${b.billId}</td><td>${b.consumerId}</td><td>${formatCurrency(b.amount)}</td><td style="color:var(--danger)">${formatDate(b.dueDate)}</td><td style="color:var(--danger)">${formatCurrency(b.lateFee)}</td></tr>`).join('')}
+        </tbody></table></div>`}
+    </div>`;
+}
+
+/* ── CUSTOMERS ── */
+function renderCustomers() {
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-header animate-in">
+      <h1 class="page-title">Customer Management</h1>
+    </div>
+    <div class="section-card">
+      <div class="section-head">
+        <span class="section-title">All Customers</span>
+        <button class="btn btn-primary btn-sm" onclick="showAddCustomer()">+ Add Customer</button>
+      </div>
+      <div id="customerTable"></div>
+    </div>`;
+  refreshCustomerTable();
+}
+
+function refreshCustomerTable() {
+  const el = document.getElementById('customerTable');
+  if (!el) return;
+  if (DB.customers.length === 0) { el.innerHTML = '<div class="empty-state"><span class="empty-state-icon">👥</span><div class="empty-state-text">No customers yet.</div></div>'; return; }
+  el.innerHTML = `<div class="table-wrap"><table><thead><tr><th>ID</th><th>Title</th><th>Name</th><th>User ID</th><th>Email</th><th>Mobile</th><th>Area</th><th>Type</th><th>Status</th><th>Load(kW)</th><th>Actions</th></tr></thead><tbody>
+    ${DB.customers.map(c=>`<tr>
+      <td><code>${c.consumerId}</code></td>
+      <td>${c.title || '-'}</td>
+      <td>${c.name}</td>
+      <td><code>${c.userId || '-'}</code></td>
+      <td>${c.email}</td><td>${c.mobile}</td><td>${c.addressArea}</td>
+      <td>${renderBadge(c.connectionType)}</td>
+      <td>${renderBadge(c.status || 'Active')}</td>
+      <td>${c.sanctionedLoadKw}</td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="showEditCustomer('${c.consumerId}')">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteCustomer('${c.consumerId}')">🗑️</button>
+      </td>
+    </tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+function showAddCustomer() {
+  openModal(`
+    <div class="modal-header"><span class="modal-title">➕ Add Customer</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <form id="addCustForm" novalidate>
+      <div class="form-row">
+        <div class="form-group"><label>Consumer ID (13 digits)</label><input id="ac_id" placeholder="1234567890123" maxlength="13" required/><span class="field-error" id="e_ac_id"></span></div>
+        <div class="form-group"><label>Title</label><select id="ac_title" required><option value="Mr">Mr</option><option value="Mrs">Mrs</option><option value="Ms">Ms</option><option value="Dr">Dr</option></select></div>
+      </div>
+      <div class="form-group"><label>Name</label><input id="ac_name" placeholder="Full Name" required/><span class="field-error" id="e_ac_name"></span></div>
+      <div class="form-row">
+        <div class="form-group"><label>Email</label><input id="ac_email" type="email" placeholder="email@example.com" required/><span class="field-error" id="e_ac_email"></span></div>
+        <div class="form-group"><label>Mobile</label><input id="ac_mobile" placeholder="10 digits" maxlength="10" required/><span class="field-error" id="e_ac_mobile"></span></div>
+      </div>
+      <div class="form-group"><label>User ID (5-20 alphanumeric)</label><input id="ac_userId" placeholder="e.g. rahul123" required/><span class="field-error" id="e_ac_userId"></span></div>
+      <div class="form-row">
+        <div class="form-group"><label>Area</label><input id="ac_area" placeholder="City/Area" required/></div>
+        <div class="form-group"><label>Type</label><select id="ac_type"><option value="RESIDENTIAL">Residential</option><option value="COMMERCIAL">Commercial</option></select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Load (kW)</label><input id="ac_load" type="number" step="0.1" min="0.1" placeholder="2.0" required/><span class="field-error" id="e_ac_load"></span></div>
+        <div class="form-group"><label>Password (6-30 chars, 1 digit)</label><input id="ac_pass" type="password" placeholder="min 6 chars, 1 digit" required/><span class="field-error" id="e_ac_pass"></span></div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-full">Add Customer</button>
+    </form>`);
+  document.getElementById('addCustForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const id=document.getElementById('ac_id').value.trim(), title=document.getElementById('ac_title').value,
+      name=document.getElementById('ac_name').value.trim(),
+      email=document.getElementById('ac_email').value.trim(), mobile=document.getElementById('ac_mobile').value.trim(),
+      userId=document.getElementById('ac_userId').value.trim(),
+      area=document.getElementById('ac_area').value.trim(), type=document.getElementById('ac_type').value,
+      load=parseFloat(document.getElementById('ac_load').value), pass=document.getElementById('ac_pass').value;
+    let ok=true;
+    const s=(id,m)=>{const el=document.getElementById(id);if(el)el.textContent=m;};
+    document.querySelectorAll('.field-error').forEach(el=>el.textContent='');
+    if(Validate.consumerId(id)){s('e_ac_id',Validate.consumerId(id));ok=false;}
+    else if(findCustomer(id)){s('e_ac_id','ID already exists.');ok=false;}
+    if(Validate.name(name)){s('e_ac_name',Validate.name(name));ok=false;}
+    if(Validate.email(email)){s('e_ac_email',Validate.email(email));ok=false;}
+    else if(DB.customers.find(c=>c.email===email)){s('e_ac_email','Email already registered.');ok=false;}
+    if(Validate.mobile(mobile)){s('e_ac_mobile',Validate.mobile(mobile));ok=false;}
+    if(Validate.userId(userId)){s('e_ac_userId',Validate.userId(userId));ok=false;}
+    else if(DB.customers.find(c=>c.userId===userId)){s('e_ac_userId','User ID already exists.');ok=false;}
+    if(Validate.load(load)){s('e_ac_load',Validate.load(load));ok=false;}
+    if(Validate.password(pass)){s('e_ac_pass',Validate.password(pass));ok=false;}
+    if(!ok)return;
+    DB.customers.push({consumerId:id,name,email,mobile,password:pass,title,userId,status:'Active',addressArea:area,connectionType:type,sanctionedLoadKw:load,previousMeterReading:0,notifications:['Account created by Admin.']});
+    closeModal(); showToast('Customer added!','success'); refreshCustomerTable();
+  });
+}
+
+function showEditCustomer(id) {
+  const c = findCustomer(id); if (!c) return;
+  openModal(`
+    <div class="modal-header"><span class="modal-title">✏️ Update ${c.name}</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <form id="editCustForm">
+      <div class="form-group"><label>Email</label><input id="ec_email" value="${c.email}" required/><span class="field-error" id="e_ec_email"></span></div>
+      <div class="form-group"><label>Sanctioned Load (kW)</label><input id="ec_load" type="number" step="0.1" min="0.1" value="${c.sanctionedLoadKw}" required/><span class="field-error" id="e_ec_load"></span></div>
+      <button type="submit" class="btn btn-primary btn-full">Update</button>
+    </form>`);
+  document.getElementById('editCustForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const email=document.getElementById('ec_email').value.trim(), load=parseFloat(document.getElementById('ec_load').value);
+    const errE=Validate.email(email), errL=Validate.load(load);
+    if(errE){document.getElementById('e_ec_email').textContent=errE;return;}
+    if(errL){document.getElementById('e_ec_load').textContent=errL;return;}
+    c.email=email; c.sanctionedLoadKw=load;
+    closeModal(); showToast('Customer updated!','success'); refreshCustomerTable();
+  });
+}
+
+function deleteCustomer(id) {
+  if (!confirm(`Delete customer ${id}? This cannot be undone.`)) return;
+  const idx = DB.customers.findIndex(c=>c.consumerId===id);
+  if (idx>-1) { DB.customers.splice(idx,1); showToast('Customer deleted.','info'); refreshCustomerTable(); }
+}
+
+/* ── STAFF ── */
+function renderStaff() {
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-header animate-in"><h1 class="page-title">Staff Management</h1></div>
+    <div class="section-card">
+      <div class="section-head"><span class="section-title">All Staff</span><button class="btn btn-primary btn-sm" onclick="showAddStaff()">+ Add Staff</button></div>
+      <div id="staffTable"></div>
+    </div>`;
+  refreshStaffTable();
+}
+
+function refreshStaffTable() {
+  const el = document.getElementById('staffTable'); if (!el) return;
+  if (DB.staff.length === 0) { el.innerHTML = '<div class="empty-state"><span class="empty-state-icon">👷</span><div class="empty-state-text">No staff registered.</div></div>'; return; }
+  el.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Staff ID</th><th>Name</th><th>Area Assigned</th></tr></thead><tbody>
+    ${DB.staff.map(s=>`<tr><td><code>${s.staffId}</code></td><td>${s.name}</td><td>${s.areaAssigned}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+function showAddStaff() {
+  openModal(`
+    <div class="modal-header"><span class="modal-title">➕ Add Staff</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <form id="addStaffForm">
+      <div class="form-group"><label>Staff ID</label><input id="as_id" placeholder="S103" required/><span class="field-error" id="e_as_id"></span></div>
+      <div class="form-group"><label>Full Name</label><input id="as_name" placeholder="Full Name" required/><span class="field-error" id="e_as_name"></span></div>
+      <div class="form-group"><label>Area Assigned</label><input id="as_area" placeholder="e.g. Delhi East" required/></div>
+      <div class="form-group"><label>Password</label><input id="as_pass" type="password" placeholder="min 6 chars, 1 digit" required/><span class="field-error" id="e_as_pass"></span></div>
+      <button type="submit" class="btn btn-primary btn-full">Add Staff</button>
+    </form>`);
+  document.getElementById('addStaffForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const id=document.getElementById('as_id').value.trim(), name=document.getElementById('as_name').value.trim(),
+      area=document.getElementById('as_area').value.trim(), pass=document.getElementById('as_pass').value;
+    let ok=true;
+    if(DB.staff.find(s=>s.staffId===id)){document.getElementById('e_as_id').textContent='Staff ID already exists.';ok=false;}
+    if(Validate.name(name)){document.getElementById('e_as_name').textContent=Validate.name(name);ok=false;}
+    if(Validate.password(pass)){document.getElementById('e_as_pass').textContent=Validate.password(pass);ok=false;}
+    if(!ok)return;
+    DB.staff.push({staffId:id,name,password:pass,areaAssigned:area});
+    closeModal(); showToast('Staff added!','success'); refreshStaffTable();
+  });
+}
+
+/* ── TARIFF ── */
+function renderTariff() {
+  const t = DB.tariff;
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-header animate-in"><h1 class="page-title">Tariff Management</h1></div>
+    <div class="section-card">
+      <div class="section-head"><span class="section-title">⚡ Current Tariff Rates</span></div>
+      <div class="form-row">
+        <div class="card" style="flex:1">
+          <h3 style="margin-bottom:16px;color:var(--primary-light)">🏠 Residential</h3>
+          <div class="receipt-row"><span>Fixed Charge</span><span>₹${t.residential.fixedPerKw}/kW</span></div>
+          <div class="receipt-row"><span>Slab 1 (0–100 units)</span><span>₹${t.residential.slab1}/unit</span></div>
+          <div class="receipt-row"><span>Slab 2 (101–300 units)</span><span>₹${t.residential.slab2}/unit</span></div>
+          <div class="receipt-row"><span>Slab 3 (301+ units)</span><span>₹${t.residential.slab3}/unit</span></div>
+        </div>
+        <div class="card" style="flex:1">
+          <h3 style="margin-bottom:16px;color:var(--accent)">🏢 Commercial</h3>
+          <div class="receipt-row"><span>Fixed Charge</span><span>₹${t.commercial.fixedPerKw}/kW</span></div>
+          <div class="receipt-row"><span>Slab 1 (0–100 units)</span><span>₹${t.commercial.slab1}/unit</span></div>
+          <div class="receipt-row"><span>Slab 2 (101–300 units)</span><span>₹${t.commercial.slab2}/unit</span></div>
+          <div class="receipt-row"><span>Slab 3 (301+ units)</span><span>₹${t.commercial.slab3}/unit</span></div>
+        </div>
+      </div>
+      <div class="receipt-row" style="margin-top:16px;font-size:0.85rem"><span style="color:var(--text-muted)">Electricity Duty (Tax)</span><span>${(t.dutyPct*100).toFixed(0)}%</span></div>
+    </div>
+    <div class="section-card">
+      <div class="section-head"><span class="section-title">Update Residential Slab 1 Rate</span></div>
+      <form id="tariffForm" style="max-width:320px">
+        <div class="form-group">
+          <label>New Rate (₹/unit for 0–100 units)</label>
+          <input id="newSlab1" type="number" step="0.1" min="0.1" value="${t.residential.slab1}" required/>
+        </div>
+        <button type="submit" class="btn btn-primary">Update Rate</button>
+      </form>
+    </div>`;
+  document.getElementById('tariffForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const v = parseFloat(document.getElementById('newSlab1').value);
+    if (!v || v <= 0) { showToast('Invalid rate value.','error'); return; }
+    DB.tariff.residential.slab1 = v;
+    showToast('Tariff updated successfully!','success');
+    renderTariff();
+  });
+}
+
+/* ── REQUESTS & COMPLAINTS ── */
+function renderRequests() {
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-header animate-in"><h1 class="page-title">Requests & Complaints</h1></div>
+    <div class="tabs">
+      <button class="tab-btn active" id="tabComp" onclick="switchTab('comp')">📣 Complaints</button>
+      <button class="tab-btn" id="tabReq" onclick="switchTab('req')">🔧 Service Requests</button>
+    </div>
+    <div id="reqContent"></div>`;
+  switchTab('comp');
+}
+
+function switchTab(tab) {
+  document.getElementById('tabComp').classList.toggle('active', tab==='comp');
+  document.getElementById('tabReq').classList.toggle('active', tab==='req');
+  const el = document.getElementById('reqContent');
+  if (tab === 'comp') {
+    el.innerHTML = DB.complaints.length === 0 ? '<div class="empty-state"><span class="empty-state-icon">✅</span><div class="empty-state-text">No complaints.</div></div>' :
+      `<div class="section-card"><div class="table-wrap"><table><thead><tr><th>ID</th><th>Consumer</th><th>Description</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
+      ${DB.complaints.map(c=>`<tr><td><code>${c.complaintId}</code></td><td>${c.consumerId}</td><td>${c.description}</td><td>${renderBadge(c.priority)}</td><td>${renderBadge(c.status)}</td>
+      <td>${c.status!=='RESOLVED'?`<button class="btn btn-success btn-sm" onclick="resolveComplaint('${c.complaintId}')">✅ Resolve</button>`:'-'}</td></tr>`).join('')}
+      </tbody></table></div></div>`;
+  } else {
+    const pending = DB.requests.filter(r=>r.status==='PENDING');
+    el.innerHTML = pending.length === 0 ? '<div class="empty-state"><span class="empty-state-icon">✅</span><div class="empty-state-text">No pending requests.</div></div>' :
+      `<div class="section-card"><div class="table-wrap"><table><thead><tr><th>ID</th><th>Consumer</th><th>Type</th><th>Description</th><th>Status</th><th>Action</th></tr></thead><tbody>
+      ${DB.requests.map(r=>`<tr><td><code>${r.requestId}</code></td><td>${r.consumerId}</td><td>${r.requestType.replace('_',' ')}</td><td>${r.description}</td><td>${renderBadge(r.status)}</td>
+      <td style="display:flex;gap:6px">${r.status==='PENDING'?`<button class="btn btn-success btn-sm" onclick="processRequest('${r.requestId}','APPROVED')">✅</button><button class="btn btn-danger btn-sm" onclick="processRequest('${r.requestId}','REJECTED')">❌</button>`:'-'}</td></tr>`).join('')}
+      </tbody></table></div></div>`;
+  }
+}
+
+function resolveComplaint(id) {
+  const c = findComplaint(id); if (!c) return;
+  c.status = 'RESOLVED';
+  const cust = findCustomer(c.consumerId);
+  if (cust) cust.notifications.push(`Your complaint ${id} has been marked as RESOLVED.`);
+  showToast('Complaint resolved!','success'); renderRequests();
+}
+
+function processRequest(id, action) {
+  const r = findRequest(id); if (!r) return;
+  r.status = action;
+  const cust = findCustomer(r.consumerId);
+  if (cust) cust.notifications.push(`Your request ${id} has been ${action}.`);
+  showToast(`Request ${action.toLowerCase()}!`, action==='APPROVED'?'success':'info');
+  renderRequests();
+}
+
+/* ── ANALYTICS ── */
+function renderAnalytics() {
+  const a = getAnalytics();
+  const maxVal = Math.max(a.revenue, a.pendingDues, 1);
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-header animate-in"><h1 class="page-title">Analytics & Reports</h1></div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">Total Revenue</div><div class="stat-value" style="color:var(--success);font-size:1.4rem">${formatCurrency(a.revenue)}</div></div>
+      <div class="stat-card"><div class="stat-label">Pending Dues</div><div class="stat-value" style="color:var(--warning);font-size:1.4rem">${formatCurrency(a.pendingDues)}</div></div>
+      <div class="stat-card"><div class="stat-label">Open Complaints</div><div class="stat-value" style="color:var(--danger)">${a.openComplaints}</div></div>
+      <div class="stat-card"><div class="stat-label">Resolved Complaints</div><div class="stat-value" style="color:var(--success)">${a.resolvedComplaints}</div></div>
+    </div>
+    <div class="section-card animate-in">
+      <div class="section-head"><span class="section-title">💰 Revenue vs Pending Dues</span></div>
+      <div class="bar-chart" id="revChart" style="padding:0 20px">
+        <div class="bar-item">
+          <div class="bar" style="height:${Math.round((a.revenue/maxVal)*150)}px;background:var(--success)"></div>
+          <div class="bar-label">Revenue<br>₹${a.revenue.toFixed(0)}</div>
+        </div>
+        <div class="bar-item">
+          <div class="bar" style="height:${Math.round((a.pendingDues/maxVal)*150)}px;background:var(--warning)"></div>
+          <div class="bar-label">Pending<br>₹${a.pendingDues.toFixed(0)}</div>
+        </div>
+      </div>
+    </div>
+    <div class="section-card animate-in">
+      <div class="section-head"><span class="section-title">⚠️ Defaulters Report</span></div>
+      ${a.defaulters.length===0?'<div class="empty-state"><span class="empty-state-icon">✅</span><div class="empty-state-text">No defaulters found.</div></div>':
+        `<div class="table-wrap"><table><thead><tr><th>Bill ID</th><th>Consumer</th><th>Amount</th><th>Due Date</th><th>Late Fee</th><th>Total</th></tr></thead><tbody>
+        ${a.defaulters.map(b=>`<tr><td>${b.billId}</td><td>${b.consumerId}</td><td>${formatCurrency(b.amount)}</td><td style="color:var(--danger)">${formatDate(b.dueDate)}</td><td style="color:var(--danger)">${formatCurrency(b.lateFee)}</td><td style="font-weight:700">${formatCurrency(b.totalPayable)}</td></tr>`).join('')}
+        </tbody></table></div>`}
+    </div>`;
+}
+
+navigate('dashboard');
+</script>
+</body>
+</html>

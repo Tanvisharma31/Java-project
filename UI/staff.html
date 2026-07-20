@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Staff Portal | VidyutSeva</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+<div id="toastContainer"></div>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="document.getElementById('sidebar').classList.remove('open');document.getElementById('sidebarOverlay').classList.remove('active')"></div>
+<button class="hamburger" onclick="document.getElementById('sidebar').classList.toggle('open');document.getElementById('sidebarOverlay').classList.toggle('active')">☰</button>
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main-content" id="mainContent"></main>
+</div>
+<script src="data.js"></script>
+<script src="auth.js"></script>
+<script>
+const session = Auth.require('staff');
+document.getElementById('sidebar').innerHTML = buildSidebar('staff','meter');
+
+function navigate(section) {
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.querySelector(`[data-section="${section}"]`)?.classList.add('active');
+  section === 'meter' ? renderMeter() : renderAreaComplaints();
+}
+
+/* ── METER READINGS ── */
+function renderMeter() {
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-header animate-in">
+      <h1 class="page-title">📟 Meter Reading Entry</h1>
+      <p class="page-subtitle">Area: <strong>${session.data.areaAssigned}</strong></p>
+    </div>
+    <div class="meter-form section-card animate-in">
+      <form id="meterForm" novalidate>
+        <div class="form-group">
+          <label>Consumer ID (13 digits)</label>
+          <input id="mConsumerId" placeholder="e.g. 1234567890123" maxlength="13" required/>
+          <span class="field-error" id="e_mConsumerId"></span>
+        </div>
+        <button type="button" class="btn btn-ghost btn-full" style="margin-bottom:16px" onclick="lookupCustomer()">🔍 Lookup Customer</button>
+        <div id="custInfo" class="hidden"></div>
+        <div id="readingSection" class="hidden">
+          <div id="areaWarn" class="area-warning hidden">⚠️ Warning: This customer is NOT in your assigned area. Proceed with caution.</div>
+          <div class="reading-display" id="prevReadingDisplay"></div>
+          <div class="form-group">
+            <label>Current Meter Reading</label>
+            <input id="mCurrentReading" type="number" min="0" placeholder="Enter current reading" required/>
+            <span class="field-error" id="e_mCurrentReading"></span>
+          </div>
+          <div id="unitsPreview" class="hidden" style="background:var(--bg3);border-radius:var(--radius-sm);padding:14px;margin-bottom:16px;text-align:center">
+            <div style="color:var(--text-muted);font-size:0.8rem">Estimated Units & Amount</div>
+            <div id="unitsVal" style="font-size:1.5rem;font-weight:800;color:var(--primary-light)"></div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-full">⚡ Generate Bill</button>
+        </div>
+      </form>
+      <div id="billResult" class="hidden"></div>
+    </div>`;
+
+  let currentCust = null;
+
+  document.getElementById('mCurrentReading').addEventListener('input', function() {
+    if (!currentCust) return;
+    const cur = parseInt(this.value);
+    const prev = currentCust.previousMeterReading;
+    if (!isNaN(cur) && cur >= prev) {
+      const units = cur - prev;
+      const amt = calculateBillAmount(units, currentCust);
+      document.getElementById('unitsPreview').classList.remove('hidden');
+      document.getElementById('unitsVal').textContent = `${units} units → ${formatCurrency(amt)}`;
+    } else {
+      document.getElementById('unitsPreview').classList.add('hidden');
+    }
+  });
+
+  window.lookupCustomer = function() {
+    const id = document.getElementById('mConsumerId').value.trim();
+    document.getElementById('e_mConsumerId').textContent = '';
+    if (!id) { document.getElementById('e_mConsumerId').textContent = 'Enter a Consumer ID.'; return; }
+    const c = findCustomer(id);
+    if (!c) { document.getElementById('e_mConsumerId').textContent = 'Customer not found.'; return; }
+    currentCust = c;
+    const mismatch = c.addressArea.toLowerCase() !== session.data.areaAssigned.toLowerCase();
+    document.getElementById('custInfo').className = 'profile-card animate-in';
+    const initials = c.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    document.getElementById('custInfo').innerHTML = `
+      <div class="avatar">${initials}</div>
+      <div class="profile-info">
+        <div class="profile-name">${c.name}</div>
+        <div class="profile-id">${c.consumerId}</div>
+        <div class="profile-meta">
+          <span class="profile-meta-item">📍 ${c.addressArea}</span>
+          <span class="profile-meta-item">${renderBadge(c.connectionType)}</span>
+          <span class="profile-meta-item">⚡ ${c.sanctionedLoadKw} kW</span>
+        </div>
+      </div>`;
+    document.getElementById('areaWarn').classList.toggle('hidden', !mismatch);
+    document.getElementById('prevReadingDisplay').innerHTML = `<div class="reading-label">Previous Meter Reading</div><div class="reading-val">${c.previousMeterReading}</div>`;
+    document.getElementById('readingSection').classList.remove('hidden');
+  };
+
+  document.getElementById('meterForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    if (!currentCust) return;
+    const cur = parseInt(document.getElementById('mCurrentReading').value);
+    const prev = currentCust.previousMeterReading;
+    const errR = Validate.reading(cur, prev);
+    if (errR) { document.getElementById('e_mCurrentReading').textContent = errR; return; }
+
+    const units = cur - prev;
+    const amount = calculateBillAmount(units, currentCust);
+    DB.billSeq++;
+    const billId = `B${DB.billSeq}`;
+    const bill = {
+      billId, consumerId: currentCust.consumerId,
+      previousReading: prev, currentReading: cur, unitsConsumed: units,
+      amount, lateFee: 0, totalPayable: amount,
+      billDate: todayStr(), dueDate: dueDateStr(15),
+      status: 'PENDING', paymentMethod: 'N/A', paymentDate: null,
+    };
+    DB.bills.push(bill);
+    currentCust.previousMeterReading = cur;
+    currentCust.notifications.push(`New bill ${billId} generated: ${formatCurrency(amount)}. Due: ${formatDate(bill.dueDate)}`);
+
+    document.getElementById('readingSection').classList.add('hidden');
+    document.getElementById('custInfo').classList.add('hidden');
+    const res = document.getElementById('billResult');
+    res.className = 'section-card animate-in';
+    res.innerHTML = `
+      <div style="text-align:center;padding:20px 0">
+        <div style="font-size:3rem">✅</div>
+        <h2 style="margin:10px 0;color:var(--success)">Bill Generated!</h2>
+      </div>
+      <div class="receipt">
+        <div class="receipt-header"><strong>⚡ ELECTRICITY BILL</strong><br><small style="color:var(--text-muted)">${billId}</small></div>
+        <div class="receipt-row"><span>Consumer</span><span>${currentCust.name} (${currentCust.consumerId})</span></div>
+        <div class="receipt-row"><span>Reading</span><span>${prev} → ${cur}</span></div>
+        <div class="receipt-row"><span>Units Consumed</span><span>${units} units</span></div>
+        <div class="receipt-row"><span>Bill Date</span><span>${formatDate(bill.billDate)}</span></div>
+        <div class="receipt-row"><span>Due Date</span><span>${formatDate(bill.dueDate)}</span></div>
+        <div class="receipt-row total"><span>Total Amount</span><span style="color:var(--primary-light)">${formatCurrency(amount)}</span></div>
+      </div>
+      <button class="btn btn-primary btn-full" style="margin-top:16px" onclick="renderMeter()">📟 Enter Another Reading</button>`;
+    showToast(`Bill ${billId} generated for ${formatCurrency(amount)}!`, 'success');
+  });
+}
+
+/* ── AREA COMPLAINTS ── */
+function renderAreaComplaints() {
+  const area = session.data.areaAssigned;
+  const areaComplaints = DB.complaints.filter(c => {
+    const cust = findCustomer(c.consumerId);
+    return cust && cust.addressArea.toLowerCase() === area.toLowerCase();
+  });
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-header animate-in">
+      <h1 class="page-title">📋 Area Complaints</h1>
+      <p class="page-subtitle">Showing complaints for: <strong>${area}</strong></p>
+    </div>
+    <div class="section-card animate-in">
+      ${areaComplaints.length === 0
+        ? '<div class="empty-state"><span class="empty-state-icon">✅</span><div class="empty-state-text">No complaints in your area.</div></div>'
+        : `<div class="table-wrap"><table><thead><tr><th>Complaint ID</th><th>Consumer</th><th>Description</th><th>Priority</th><th>Status</th></tr></thead><tbody>
+          ${areaComplaints.map(c=>`<tr><td><code>${c.complaintId}</code></td><td>${c.consumerId}</td><td>${c.description}</td><td>${renderBadge(c.priority)}</td><td>${renderBadge(c.status)}</td></tr>`).join('')}
+          </tbody></table></div>`}
+    </div>`;
+}
+
+navigate('meter');
+</script>
+</body>
+</html>

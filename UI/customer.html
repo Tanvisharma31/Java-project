@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Customer Portal | VidyutSeva</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+<div id="toastContainer"></div>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="document.getElementById('sidebar').classList.remove('open');document.getElementById('sidebarOverlay').classList.remove('active')"></div>
+<button class="hamburger" onclick="document.getElementById('sidebar').classList.toggle('open');document.getElementById('sidebarOverlay').classList.toggle('active')">☰</button>
+<div class="app-layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main-content" id="mainContent"></main>
+</div>
+<script src="data.js"></script>
+<script src="auth.js"></script>
+<script>
+const session = Auth.require('customer');
+const cust = session.data;
+document.getElementById('sidebar').innerHTML = buildSidebar('customer','dashboard');
+
+function navigate(section) {
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.querySelector(`[data-section="${section}"]`)?.classList.add('active');
+  const renders = {
+    dashboard: renderDashboard, profile: renderProfile, bills: renderBills,
+    history: renderHistory, complaint: renderComplaint, service: renderService,
+    notifications: renderNotifications, password: renderPassword
+  };
+  (renders[section] || renderDashboard)();
+}
+
+/* ── DASHBOARD ── */
+function renderDashboard() {
+  applyLateFees(DB.bills);
+  const myBills = customerBills(cust.consumerId);
+  const pending = myBills.filter(b=>b.status==='PENDING');
+  const paid    = myBills.filter(b=>b.status==='PAID');
+  const totalDue = pending.reduce((s,b)=>s+b.totalPayable,0);
+  const unread  = (cust.notifications||[]).length;
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-header animate-in">
+      <h1 class="page-title">Welcome back, ${cust.name.split(' ')[0]}! 👋</h1>
+      <p class="page-subtitle">Consumer ID: ${cust.consumerId} &nbsp;|&nbsp; ${cust.connectionType} Connection</p>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card" onclick="navigate('bills')" style="cursor:pointer">
+        <div class="stat-icon">🧾</div><div class="stat-label">Pending Bills</div>
+        <div class="stat-value" style="color:var(--warning)">${pending.length}</div>
+        <div class="stat-sub">${formatCurrency(totalDue)} due</div>
+      </div>
+      <div class="stat-card" onclick="navigate('history')" style="cursor:pointer">
+        <div class="stat-icon">✅</div><div class="stat-label">Bills Paid</div>
+        <div class="stat-value" style="color:var(--success)">${paid.length}</div>
+      </div>
+      <div class="stat-card" onclick="navigate('notifications')" style="cursor:pointer">
+        <div class="stat-icon">🔔</div><div class="stat-label">Notifications</div>
+        <div class="stat-value" style="color:var(--info)">${unread}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">⚡</div><div class="stat-label">Current Reading</div>
+        <div class="stat-value">${cust.previousMeterReading}</div>
+        <div class="stat-sub">units</div>
+      </div>
+    </div>
+    ${pending.length > 0 ? `
+    <div class="section-card animate-in" style="border-color:rgba(245,158,11,0.3);background:rgba(245,158,11,0.05)">
+      <div class="section-head"><span class="section-title">⚠️ You have ${pending.length} unpaid bill(s)</span><button class="btn btn-primary btn-sm" onclick="navigate('bills')">Pay Now</button></div>
+      ${pending.map(b=>`<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--card-border)">
+        <span>${b.billId} &nbsp; <span class="badge badge-pending">PENDING</span></span>
+        <strong style="color:var(--warning)">${formatCurrency(b.totalPayable)}</strong>
+      </div>`).join('')}
+    </div>` : `<div class="section-card animate-in" style="text-align:center;padding:40px"><span style="font-size:2.5rem">🎉</span><p style="margin-top:12px;color:var(--success);font-weight:600">All bills paid! Great job.</p></div>`}`;
+}
+
+/* ── PROFILE ── */
+function renderProfile() {
+  const initials = cust.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-header animate-in"><h1 class="page-title">My Profile</h1></div>
+    <div class="profile-card animate-in">
+      <div class="avatar">${initials}</div>
+      <div class="profile-info">
+        <div class="profile-name">${cust.name}</div>
+        <div class="profile-id">${cust.consumerId}</div>
+        <div class="profile-meta">
+          ${renderBadge(cust.connectionType)}
+          <span class="profile-meta-item">⚡ ${cust.sanctionedLoadKw} kW</span>
+        </div>
+      </div>
+    </div>
+    <div class="section-card animate-in">
+      <div class="section-head"><span class="section-title">Account Details</span></div>
+      <div class="receipt-row"><span class="text-muted">📧 Email</span><span>${cust.email}</span></div>
+      <div class="receipt-row"><span class="text-muted">📱 Mobile</span><span>${cust.mobile}</span></div>
+      <div class="receipt-row"><span class="text-muted">📍 Area</span><span>${cust.addressArea}</span></div>
+      <div class="receipt-row"><span class="text-muted">🔌 Connection</span><span>${cust.connectionType}</span></div>
+      <div class="receipt-row"><span class="text-muted">⚡ Sanctioned Load</span><span>${cust.sanctionedLoadKw} kW</span></div>
+      <div class="receipt-row"><span class="text-muted">📟 Previous Reading</span><span>${cust.previousMeterReading} units</span></div>
+    </div>`;
+}
+
+/* ── BILLS ── */
+function renderBills() {
+  applyLateFees(DB.bills);
+  const pending = customerBills(cust.consumerId, 'PENDING');
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-header animate-in"><h1 class="page-title">View & Pay Bills</h1></div>
+    ${pending.length === 0
+      ? '<div class="section-card animate-in"><div class="empty-state"><span class="empty-state-icon">🎉</span><div class="empty-state-text">No pending bills!</div><div class="empty-state-sub">You are all clear.</div></div></div>'
+      : pending.map(b => `
+        <div class="section-card animate-in" id="bill_${b.billId}">
+          <div class="section-head">
+            <div><span class="section-title">Bill: ${b.billId}</span> &nbsp; ${renderBadge(b.status)}</div>
+            <strong style="font-size:1.2rem;color:${b.lateFee>0?'var(--danger)':'var(--primary-light)'}">${formatCurrency(b.totalPayable)}</strong>
+          </div>
+          <div class="receipt">
+            <div class="receipt-row"><span class="text-muted">Previous Reading</span><span>${b.previousReading}</span></div>
+            <div class="receipt-row"><span class="text-muted">Current Reading</span><span>${b.currentReading}</span></div>
+            <div class="receipt-row"><span class="text-muted">Units Consumed</span><span>${b.unitsConsumed} units</span></div>
+            <div class="receipt-row"><span class="text-muted">Bill Date</span><span>${formatDate(b.billDate)}</span></div>
+            <div class="receipt-row"><span class="text-muted">Due Date</span><span style="color:${new Date(b.dueDate)<new Date()?'var(--danger)':'inherit'}">${formatDate(b.dueDate)}</span></div>
+            <div class="receipt-row"><span class="text-muted">Base Amount</span><span>${formatCurrency(b.amount)}</span></div>
+            ${b.lateFee > 0 ? `<div class="receipt-row"><span class="text-muted" style="color:var(--danger)">Late Fee (${Math.round((b.lateFee/b.amount)*100)}%)</span><span style="color:var(--danger)">+ ${formatCurrency(b.lateFee)}</span></div>` : ''}
+            <div class="receipt-row total"><span>Total Payable</span><span>${formatCurrency(b.totalPayable)}</span></div>
+          </div>
+          <button class="btn btn-primary btn-full" style="margin-top:16px" onclick="startPayment('${b.billId}')">💳 Pay ${formatCurrency(b.totalPayable)}</button>
+        </div>`).join('')}`;
+}
+
+/* ── PAYMENT GATEWAY ── */
+function startPayment(billId) {
+  const bill = DB.bills.find(b=>b.billId===billId); if (!bill) return;
+  openModal(`
+    <div class="modal-header"><span class="modal-title">💳 Payment Gateway</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:0.85rem;color:var(--text-muted)">Amount to Pay</div>
+      <div style="font-size:2rem;font-weight:800;color:var(--primary-light)">${formatCurrency(bill.totalPayable)}</div>
+      <div style="font-size:0.78rem;color:var(--text-dim)">${bill.billId}</div>
+    </div>
+    <div class="payment-methods">
+      <div class="pay-method" id="pm_card" onclick="selectMethod('card')"><span class="pay-method-icon">💳</span><div class="pay-method-label">Card</div></div>
+      <div class="pay-method" id="pm_upi"  onclick="selectMethod('upi')"><span class="pay-method-icon">📱</span><div class="pay-method-label">UPI</div></div>
+      <div class="pay-method" id="pm_net"  onclick="selectMethod('net')"><span class="pay-method-icon">🏦</span><div class="pay-method-label">Net Banking</div></div>
+    </div>
+    <div id="payFields"></div>
+    <div id="payErr" class="field-error" style="margin-bottom:8px"></div>
+    <button class="btn btn-primary btn-full" id="payBtn" onclick="confirmPayment('${billId}')" disabled>Confirm Payment</button>`);
+}
+
+let selectedMethod = null;
+function selectMethod(m) {
+  selectedMethod = m;
+  document.querySelectorAll('.pay-method').forEach(el=>el.classList.remove('selected'));
+  document.getElementById(`pm_${m}`).classList.add('selected');
+  const pf = document.getElementById('payFields');
+  if (m==='card') pf.innerHTML = `
+    <div class="form-group"><label>Card Number (minimum 16 digits)</label><input id="cardNum" placeholder="1234 5678 9012 3456" oninput="this.value=this.value.replace(/\\D/g,'')"/><span class="field-error" id="e_cardNum"></span></div>
+    <div class="form-group"><label>Card Holder Name (minimum 10 characters)</label><input id="cardHolder" placeholder="Name on card"/><span class="field-error" id="e_cardHolder"></span></div>
+    <div class="form-row">
+      <div class="form-group"><label>Expiry Date (MM/YY)</label><input id="cardExpiry" placeholder="MM/YY" maxlength="5"/><span class="field-error" id="e_cardExpiry"></span></div>
+      <div class="form-group"><label>CVV (3-4 digits)</label><input id="cardCvv" type="password" placeholder="123" maxlength="4"/><span class="field-error" id="e_cardCvv"></span></div>
+    </div>`;
+  else if (m==='upi') pf.innerHTML = `<div class="form-group"><label>UPI ID</label><input id="upiId" placeholder="yourname@bank"/><span class="field-error" id="e_upiId"></span></div>`;
+  else pf.innerHTML = `<div class="form-group"><label>Bank Name</label><input id="bankName" placeholder="e.g. SBI, HDFC"/></div>`;
+  document.getElementById('payBtn').disabled = false;
+}
+
+function confirmPayment(billId) {
+  const bill = DB.bills.find(b=>b.billId===billId); if (!bill) return;
+  document.getElementById('payErr').textContent = '';
+  document.querySelectorAll('.field-error').forEach(el => el.textContent = '');
+  let method = '', valid = true;
+  if (selectedMethod === 'card') {
+    const cardNum = (document.getElementById('cardNum')?.value||'').replace(/\s/g,'');
+    const cardHolder = document.getElementById('cardHolder')?.value||'';
+    const cardExpiry = document.getElementById('cardExpiry')?.value||'';
+    const cardCvv = document.getElementById('cardCvv')?.value||'';
+
+    const errNum = Validate.cardNumber(cardNum);
+    if (errNum) { document.getElementById('e_cardNum').textContent = errNum; valid=false; }
+
+    const errHolder = Validate.cardHolderName(cardHolder);
+    if (errHolder) { document.getElementById('e_cardHolder').textContent = errHolder; valid=false; }
+
+    const errExpiry = Validate.expiryDate(cardExpiry);
+    if (errExpiry) { document.getElementById('e_cardExpiry').textContent = errExpiry; valid=false; }
+
+    const errCvv = Validate.cvv(cardCvv);
+    if (errCvv) { document.getElementById('e_cardCvv').textContent = errCvv; valid=false; }
+
+    if (valid) method='CARD';
+  } else if (selectedMethod === 'upi') {
+    const v = document.getElementById('upiId')?.value||'';
+    const err = Validate.upi(v); if (err) { document.getElementById('e_upiId').textContent = err; valid=false; } else method='UPI';
+  } else if (selectedMethod === 'net') {
+    method = 'NET_BANKING';
+  } else { document.getElementById('payErr').textContent = 'Please select a payment method.'; valid=false; }
+  if (!valid) return;
+
+  const btn = document.getElementById('payBtn');
+  btn.innerHTML = '<span class="spinner"></span> Processing…'; btn.disabled = true;
+  setTimeout(() => {
+    bill.status = 'PAID'; bill.paymentMethod = method; bill.paymentDate = todayStr();
+    cust.notifications.push(`Payment successful via ${method} for Bill ${billId}: ${formatCurrency(bill.totalPayable)}`);
+    closeModal();
+    showReceipt(bill);
+    showToast('Payment successful! 🎉','success');
+  }, 1500);
+}
+
+function showReceipt(bill) {
+  openModal(`
+    <div class="modal-header"><span class="modal-title">🧾 Payment Receipt</span><button class="modal-close" onclick="closeModal();renderBills()">×</button></div>
+    <div class="receipt">
+      <div class="receipt-header"><strong>⚡ ELECTRICITY BILL RECEIPT</strong></div>
+      <div class="receipt-row"><span>Bill ID</span><span>${bill.billId}</span></div>
+      <div class="receipt-row"><span>Consumer</span><span>${cust.name} (${cust.consumerId})</span></div>
+      <div class="receipt-row"><span>Units</span><span>${bill.unitsConsumed}</span></div>
+      <div class="receipt-row"><span>Base Amount</span><span>${formatCurrency(bill.amount)}</span></div>
+      <div class="receipt-row"><span>Late Fee</span><span>${formatCurrency(bill.lateFee)}</span></div>
+      <div class="receipt-row total"><span>Total Paid</span><span style="color:var(--success)">${formatCurrency(bill.totalPayable)}</span></div>
+      <div class="receipt-row"><span>Method</span><span>${bill.paymentMethod}</span></div>
+      <div class="receipt-row"><span>Date</span><span>${formatDate(bill.paymentDate)}</span></div>
+    </div>
+    <button class="btn btn-primary btn-full" style="margin-top:16px" onclick="closeModal();renderBills()">✅ Done</button>`);
+}
+
+/* ── PAYMENT HISTORY ── */
+function renderHistory() {
+  const paid = customerBills(cust.consumerId, 'PAID');
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-header animate-in"><h1 class="page-title">Payment History</h1></div>
+    <div class="section-card animate-in">
+      ${paid.length === 0
+        ? '<div class="empty-state"><span class="empty-state-icon">📜</span><div class="empty-state-text">No payment history yet.</div></div>'
+        : `<div class="table-wrap"><table><thead><tr><th>Bill ID</th><th>Date Paid</th><th>Units</th><th>Method</th><th>Amount</th></tr></thead><tbody>
+          ${paid.map(b=>`<tr><td><code>${b.billId}</code></td><td>${formatDate(b.paymentDate)}</td><td>${b.unitsConsumed}</td><td>${b.paymentMethod}</td><td style="font-weight:700;color:var(--success)">${formatCurrency(b.totalPayable)}</td></tr>`).join('')}
+          </tbody></table></div>`}
+    </div>`;
+}
+
+/* ── RAISE COMPLAINT ── */
+function renderComplaint() {
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-header animate-in"><h1 class="page-title">📣 Raise a Complaint</h1></div>
+    <div class="section-card animate-in" style="max-width:520px">
+      <form id="compForm" novalidate>
+        <div class="form-group">
+          <label>Consumer No (13 digits) *</label>
+          <input id="compConsumerNo" value="${cust.consumerId}" maxlength="13" readonly/>
+          <span class="field-error" id="e_compConsumerNo"></span>
+        </div>
+        <div class="form-group">
+          <label>Complaint Type *</label>
+          <select id="compType">
+            <option value="">Select type...</option>
+            <option value="Billing related">Billing related</option>
+            <option value="Voltage related">Voltage related</option>
+            <option value="Frequent disruption">Frequent disruption</option>
+            <option value="Street light related">Street light related</option>
+            <option value="Pole related">Pole related</option>
+          </select>
+          <span class="field-error" id="e_compType"></span>
+        </div>
+        <div class="form-group">
+          <label>Category</label>
+          <input id="compCategory" placeholder="Category based on complaint type"/>
+        </div>
+        <div class="form-group">
+          <label>Contact Person</label>
+          <input id="compContact" placeholder="Contact person name"/>
+        </div>
+        <div class="form-group">
+          <label>Landmark</label>
+          <input id="compLandmark" placeholder="Nearby landmark"/>
+        </div>
+        <div class="form-group">
+          <label>Problem Description *</label>
+          <textarea id="compDesc" rows="4" placeholder="Describe your issue in detail…" required></textarea>
+          <span class="field-error" id="e_compDesc"></span>
+        </div>
+        <div class="form-group">
+          <label>Mobile Number (10 digits) *</label>
+          <input id="compMobile" value="${cust.mobile}" maxlength="10" readonly/>
+          <span class="field-error" id="e_compMobile"></span>
+        </div>
+        <div class="form-group">
+          <label>Address</label>
+          <textarea id="compAddress" rows="2" placeholder="Full address">${cust.addressArea || ''}</textarea>
+        </div>
+        <div class="form-group">
+          <label>Priority *</label>
+          <select id="compPriority"><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="HIGH">High</option></select>
+        </div>
+        <button type="submit" class="btn btn-primary btn-full">Submit Complaint</button>
+      </form>
+    </div>
+    <div class="section-card animate-in">
+      <div class="section-head"><span class="section-title">My Complaints</span></div>
+      ${DB.complaints.filter(c=>c.consumerId===cust.consumerId).length === 0
+        ? '<div class="empty-state"><span class="empty-state-icon">📣</span><div class="empty-state-text">No complaints raised yet.</div></div>'
+        : `<div class="table-wrap"><table><thead><tr><th>ID</th><th>Description</th><th>Priority</th><th>Status</th></tr></thead><tbody>
+          ${DB.complaints.filter(c=>c.consumerId===cust.consumerId).map(c=>`<tr><td><code>${c.complaintId}</code></td><td>${c.description}</td><td>${renderBadge(c.priority)}</td><td>${renderBadge(c.status)}</td></tr>`).join('')}
+          </tbody></table></div>`}
+    </div>`;
+
+  document.getElementById('compForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    document.querySelectorAll('.field-error').forEach(el => el.textContent = '');
+    const consumerNo = document.getElementById('compConsumerNo').value.trim();
+    const compType = document.getElementById('compType').value;
+    const category = document.getElementById('compCategory').value.trim();
+    const contact = document.getElementById('compContact').value.trim();
+    const landmark = document.getElementById('compLandmark').value.trim();
+    const desc = document.getElementById('compDesc').value.trim();
+    const mobile = document.getElementById('compMobile').value.trim();
+    const address = document.getElementById('compAddress').value.trim();
+    const prio = document.getElementById('compPriority').value;
+    let ok = true;
+
+    const errConsumerNo = Validate.complaintConsumerNo(consumerNo);
+    if (errConsumerNo) { document.getElementById('e_compConsumerNo').textContent = errConsumerNo; ok=false; }
+
+    const errType = Validate.complaintType(compType);
+    if (errType) { document.getElementById('e_compType').textContent = errType; ok=false; }
+
+    const errMobile = Validate.complaintMobile(mobile);
+    if (errMobile) { document.getElementById('e_compMobile').textContent = errMobile; ok=false; }
+
+    if (!desc) { document.getElementById('e_compDesc').textContent = 'Description is required.'; ok=false; }
+
+    if (!ok) return;
+
+    DB.complaintSeq++;
+    const id = `COMP${DB.complaintSeq}`;
+    DB.complaints.push({ complaintId: id, consumerId: cust.consumerId, description: desc, priority: prio, status: 'OPEN' });
+    cust.notifications.push(`Complaint ${id} raised successfully.`);
+    showToast(`Complaint ${id} submitted!`, 'success');
+    renderComplaint();
+  });
+}
+
+/* ── SERVICE REQUESTS ── */
+function renderService() {
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-header animate-in"><h1 class="page-title">🔧 Service Requests</h1></div>
+    <div class="section-card animate-in" style="max-width:520px">
+      <div class="section-head"><span class="section-title">Submit New Request</span></div>
+      <form id="svcForm" novalidate>
+        <div class="form-group">
+          <label>Request Type</label>
+          <select id="svcType"><option value="LOAD_CHANGE">Load Change</option><option value="CATEGORY_CHANGE">Category Change (Res/Com)</option></select>
+        </div>
+        <div class="form-group">
+          <label>Details *</label>
+          <textarea id="svcDesc" rows="3" placeholder="Describe your request…" required></textarea>
+          <span class="field-error" id="e_svcDesc"></span>
+        </div>
+        <button type="submit" class="btn btn-primary btn-full">Submit Request</button>
+      </form>
+    </div>
+    <div class="section-card animate-in">
+      <div class="section-head"><span class="section-title">My Request Status</span></div>
+      ${DB.requests.filter(r=>r.consumerId===cust.consumerId).length === 0
+        ? '<div class="empty-state"><span class="empty-state-icon">🔧</span><div class="empty-state-text">No requests yet.</div></div>'
+        : `<div class="table-wrap"><table><thead><tr><th>ID</th><th>Type</th><th>Description</th><th>Status</th></tr></thead><tbody>
+          ${DB.requests.filter(r=>r.consumerId===cust.consumerId).map(r=>`<tr><td><code>${r.requestId}</code></td><td>${r.requestType.replace('_',' ')}</td><td>${r.description}</td><td>${renderBadge(r.status)}</td></tr>`).join('')}
+          </tbody></table></div>`}
+    </div>`;
+
+  document.getElementById('svcForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const type = document.getElementById('svcType').value;
+    const desc = document.getElementById('svcDesc').value.trim();
+    if (!desc) { document.getElementById('e_svcDesc').textContent = 'Description is required.'; return; }
+    DB.requestSeq++;
+    const id = `REQ${DB.requestSeq}`;
+    DB.requests.push({ requestId: id, consumerId: cust.consumerId, requestType: type, description: desc, status: 'PENDING' });
+    showToast(`Request ${id} submitted!`, 'success');
+    renderService();
+  });
+}
+
+/* ── NOTIFICATIONS ── */
+function renderNotifications() {
+  const notifs = cust.notifications || [];
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-header animate-in"><h1 class="page-title">🔔 Notifications</h1><p class="page-subtitle">${notifs.length} message(s)</p></div>
+    <div class="section-card animate-in">
+      ${notifs.length === 0
+        ? '<div class="empty-state"><span class="empty-state-icon">🔔</span><div class="empty-state-text">No notifications yet.</div></div>'
+        : `<div class="notif-list">${[...notifs].reverse().map(n=>`<div class="notif-item"><div class="notif-dot"></div><span>${n}</span></div>`).join('')}</div>`}
+    </div>`;
+}
+
+/* ── CHANGE PASSWORD ── */
+function renderPassword() {
+  document.getElementById('mainContent').innerHTML = `
+    <div class="page-header animate-in"><h1 class="page-title">🔑 Change Password</h1></div>
+    <div class="section-card animate-in" style="max-width:420px">
+      <form id="pwForm" novalidate>
+        <div class="form-group">
+          <label>Current Password</label>
+          <input type="password" id="pwCur" required/>
+          <span class="field-error" id="e_pwCur"></span>
+        </div>
+        <div class="form-group">
+          <label>New Password</label>
+          <input type="password" id="pwNew" placeholder="min 6 chars, 1 digit" required/>
+          <span class="field-error" id="e_pwNew"></span>
+        </div>
+        <div class="form-group">
+          <label>Confirm New Password</label>
+          <input type="password" id="pwConf" required/>
+          <span class="field-error" id="e_pwConf"></span>
+        </div>
+        <button type="submit" class="btn btn-primary btn-full">Update Password</button>
+      </form>
+    </div>`;
+
+  document.getElementById('pwForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const cur=document.getElementById('pwCur').value, nw=document.getElementById('pwNew').value, conf=document.getElementById('pwConf').value;
+    document.querySelectorAll('.field-error').forEach(el=>el.textContent='');
+    let ok=true;
+    if(cur !== cust.password){document.getElementById('e_pwCur').textContent='Incorrect current password.';ok=false;}
+    const errNw=Validate.password(nw);if(errNw){document.getElementById('e_pwNew').textContent=errNw;ok=false;}
+    if(nw!==conf){document.getElementById('e_pwConf').textContent='Passwords do not match.';ok=false;}
+    if(!ok)return;
+    cust.password=nw;
+    const s=Auth.restore(); if(s){s.data.password=nw;sessionStorage.setItem('vs_session',JSON.stringify(s));}
+    cust.notifications.push('Password changed successfully.');
+    showToast('Password updated!','success');
+    document.getElementById('pwForm').reset();
+  });
+}
+
+navigate('dashboard');
+</script>
+</body>
+</html>

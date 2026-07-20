@@ -5,6 +5,11 @@ public class Customer {
     private String mobile;
     private String password;
     
+    // Additional fields per sheet requirements
+    private String title; // Mr, Mrs, Ms, Dr
+    private String userId; // 5-20 alphanumeric
+    private String status; // Active/Inactive
+    
     // New fields
     private String addressArea;
     private String connectionType; // RESIDENTIAL or COMMERCIAL
@@ -18,12 +23,16 @@ public class Customer {
     private int notifCount = 0;
 
     public Customer(String consumerId, String name, String email, String mobile, String password, 
+                    String title, String userId, String status,
                     String addressArea, String connectionType, double sanctionedLoadKw, int previousMeterReading) {
         this.consumerId = consumerId;
         this.name = name;
         this.email = email;
         this.mobile = mobile;
         this.password = password;
+        this.title = title;
+        this.userId = userId;
+        this.status = status;
         this.addressArea = addressArea;
         this.connectionType = connectionType;
         this.sanctionedLoadKw = sanctionedLoadKw;
@@ -44,6 +53,15 @@ public class Customer {
 
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
+
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
+
+    public String getUserId() { return userId; }
+    public void setUserId(String userId) { this.userId = userId; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 
     public Bill[] getBillHistory() { return billHistory; }
     public int getBillCount() { return billCount; }
@@ -89,6 +107,6 @@ public class Customer {
 
     @Override
     public String toString() {
-        return "Consumer ID: " + consumerId + " | Name: " + name + " | Area: " + addressArea + " | Mobile: " + mobile + "\nType: " + connectionType + " | Load: " + sanctionedLoadKw + " kW | Prev Reading: " + previousMeterReading;
+        return "Consumer ID: " + consumerId + " | Name: " + title + " " + name + " | User ID: " + userId + " | Area: " + addressArea + " | Mobile: " + mobile + "\nType: " + connectionType + " | Load: " + sanctionedLoadKw + " kW | Prev Reading: " + previousMeterReading + " | Status: " + status;
     }
 }

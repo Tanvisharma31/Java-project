@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VidyutSeva | Electricity Bill Management System</title>
+  <meta name="description" content="Modern electricity bill management portal for admins, staff, and customers." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="login-page">
+
+  <!-- Animated background -->
+  <div class="bg-orbs">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <div class="login-container">
+    <!-- Brand -->
+    <div class="brand">
+      <div class="brand-icon">⚡</div>
+      <h1 class="brand-name">VidyutSeva</h1>
+      <p class="brand-tagline">Electricity Bill Management Portal</p>
+    </div>
+
+    <!-- Role selector -->
+    <div class="role-tabs" id="roleTabs">
+      <button class="role-tab active" data-role="customer" id="tabCustomer">Customer</button>
+      <button class="role-tab" data-role="staff" id="tabStaff">Staff</button>
+      <button class="role-tab" data-role="admin" id="tabAdmin">Admin</button>
+    </div>
+
+    <!-- Login Form -->
+    <div class="card login-card">
+      <form id="loginForm" novalidate>
+        <div class="form-group" id="fgUsername">
+          <label for="loginId">Consumer ID (13 digits) / Staff ID / Username</label>
+          <input type="text" id="loginId" placeholder="e.g. 1234567890123 or admin" autocomplete="username" required />
+          <span class="field-error" id="errLoginId"></span>
+        </div>
+        <div class="form-group">
+          <label for="loginPass">Password</label>
+          <div class="password-wrap">
+            <input type="password" id="loginPass" placeholder="Enter password" autocomplete="current-password" required />
+            <button type="button" class="toggle-pass" id="togglePass" aria-label="Toggle password">👁</button>
+          </div>
+          <span class="field-error" id="errLoginPass"></span>
+        </div>
+        <div class="lockout-banner hidden" id="lockoutBanner">
+          🔒 Too many failed attempts. Locked for <span id="lockCountdown">10</span>s
+        </div>
+        <button type="submit" class="btn btn-primary btn-full" id="loginBtn">Sign In</button>
+      </form>
+
+      <div class="divider"><span>or</span></div>
+      <p class="register-link">New customer? <a href="register.html" id="gotoRegister">Register here</a></p>
+    </div>
+
+    <!-- Quick credentials hint -->
+    <div class="demo-hint">
+      <span>Demo → </span>
+      <code>admin / admin123</code> &nbsp;|&nbsp;
+      <code>S101 / staff123</code> &nbsp;|&nbsp;
+      <code>1234567890123 / pass123</code>
+    </div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="auth.js"></script>
+  <script src="login.js"></script>
+</body>
+</html>
