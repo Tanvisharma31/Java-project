@@ -1,10 +1,7 @@
 -- ============================================================
--- VIDYUTSEVA - FULL SCHEMA v2
--- Supports: Spring Boot JPA, JWT Auth, Slab Billing, Notifications
+-- VIDYUTSEVA - FULL SCHEMA v1
+-- Flyway Migration: Initial Schema Creation
 -- ============================================================
-
-CREATE DATABASE IF NOT EXISTS electricity_bill_db;
-USE electricity_bill_db;
 
 -- Users (login table, unified across roles)
 CREATE TABLE IF NOT EXISTS login (
@@ -57,6 +54,7 @@ CREATE TABLE IF NOT EXISTS customers (
     previous_meter_reading  INT           NOT NULL DEFAULT 0,
     deactivation_reason     TEXT,
     created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_customer_user   FOREIGN KEY (user_id) REFERENCES login(user_id) ON DELETE CASCADE,
     CONSTRAINT chk_consumer_id   CHECK (consumer_id REGEXP '^[0-9]{13}$'),
     CONSTRAINT chk_mobile        CHECK (mobile REGEXP '^[0-9]{10}$'),
     CONSTRAINT chk_load_positive CHECK (sanctioned_load_kw > 0),
@@ -184,3 +182,5 @@ CREATE INDEX idx_complaints_consumer  ON complaints(consumer_id);
 CREATE INDEX idx_complaints_area      ON complaints(assigned_area);
 CREATE INDEX idx_sr_consumer          ON service_requests(consumer_id);
 CREATE INDEX idx_notif_consumer       ON notifications(consumer_id);
+CREATE INDEX idx_feedback_consumer    ON feedback(consumer_id);
+CREATE INDEX idx_feedback_status      ON feedback(status);
